@@ -11,7 +11,27 @@ def get_latest():
 
     links = []
 
-    for a in soup.find_all("a", href=True):
+    for a in soup.select("a[href]"):
+        title = a.get_text(" ", strip=True)
+
+if len(title) < 20:
+    continue
+
+bad = [
+    "Skip to content",
+    "Home",
+    "Menu",
+    "Login",
+    "Register",
+    "Privacy",
+    "Contact",
+    "About"
+]
+
+if title in bad:
+    continue
+
+href = a.get("href")
         text = a.get_text(" ", strip=True)
 
         if len(text) < 15:
