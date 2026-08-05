@@ -4,21 +4,47 @@ from scrapers.parser import parse
 from formatter import make_post
 from database import is_new
 from telegram_sender import send_message
+import traceback
 import time
 
-jobs = get_latest()
 
-for job in jobs:
+def main():
 
-    if not is_new(job["link"]):
-        continue
+    jobs = get_latest()
 
-    details = get_details(job["link"])
+    if not jobs:
+        send_message("❌ Homepage se koi update nahi mila.")
+        return
 
-    data = parse(details)
+    new_count = 0
 
-    message = make_post(data, job["link"])
+    for job in jobs:
 
-    send_message(message)
+        try:
 
-    time.sleep(2)
+            if not is_new(job["link"]):
+                continue
+
+            details = get_details(job["link"])
+
+            parsed = parse(details)
+
+            message = make_post(parsed)
+
+            send_message(message)
+
+            new_count += 1
+
+            # Telegram rate limit
+            time.sleep(2)
+
+        except Exception as e:
+
+            print(e)
+            traceback.print_exc()
+
+    print(f"Done. New Posts : {new_count}")
+
+
+if name == "main":
+    main()
