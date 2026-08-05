@@ -1,28 +1,11 @@
 from scrapers.sarkariresult import get_latest
-from database import is_new
-from formatter import make_post
 from telegram_sender import send_message
 
-try:
-    jobs = get_latest()
+jobs = get_latest()
 
-    if not jobs:
-        send_message("❌ Homepage se koi update nahi mila.")
-        raise SystemExit()
+msg = ""
 
-    for job in jobs:
+for i, job in enumerate(jobs, 1):
+    msg += f"{i}. {job['title']}\n\n"
 
-        if is_new(job["link"]):
-
-            msg = make_post(
-                "SarkariResult",
-                job["title"],
-                job["link"]
-            )
-
-            send_message(msg)
-
-            break
-
-except Exception as e:
-    send_message(f"❌ ERROR\n\n{e}")
+send_message(msg[:4000])
