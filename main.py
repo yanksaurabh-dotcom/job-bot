@@ -4,46 +4,79 @@ from scrapers.parser import parse
 from formatter import make_post
 from database import is_new
 from telegram_sender import send_message
+
 import traceback
 import time
 
 
+def process_job(job):
+
+    # Duplicate check
+    if not is_new(job["link"]):
+        return False
+
+    # Article scrape
+    details = get_details(job["link"])
+
+    # Parse
+    parsed = parse(details)
+
+    # Agar title parser se nahi mila
+    if not parsed.get("title"):
+        parsed["title"] = job["title"]
+
+    # Telegram Message
+    message = make_post(parsed)
+
+    # Send
+    send_message(message)
+
+    return True
+
+
 def main():
+
+    print("=" * 60)
+    print("SarkariResult Bot Started")
+    print("=" * 60)
 
     jobs = get_latest()
 
     if not jobs:
-        send_message("❌ Homepage se koi update nahi mila.")
+
+        print("No Jobs Found")
+
         return
 
-    new_count = 0
+    total = 0
+
+    sent = 0
 
     for job in jobs:
 
+        total += 1
+
         try:
 
-            if not is_new(job["link"]):
-                continue
+            if process_job(job):
 
-            details = get_details(job["link"])
+                sent += 1
 
-            parsed = parse(details)
+                print(f"[{sent}] {job['title']}")
 
-            message = make_post(parsed)
-
-            send_message(message)
-
-            new_count += 1
-
-            # Telegram rate limit
-            time.sleep(2)
+                # Telegram Rate Limit
+                time.sleep(2)
 
         except Exception as e:
 
             print(e)
+
             traceback.print_exc()
 
-    print(f"Done. New Posts : {new_count}")
+    print("=" * 60)
+    print(f"Checked : {total}")
+    print(f"Sent    : {sent}")
+    print("=" * 60)
 
 
 if name == "main":
