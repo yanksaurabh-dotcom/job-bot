@@ -1,85 +1,148 @@
 import re
 
 
-def find(text, start, end_list):
-    try:
-        s = text.index(start) + len(start)
+def _find_section(sections, keywords):
+    for name, value in sections.items():
+        low = name.lower()
 
-        e = len(text)
+        for key in keywords:
+            if key in low:
+                return value
 
-        for end in end_list:
-            p = text.find(end, s)
-            if p != -1 and p < e:
-                e = p
-
-        return text[s:e].strip()
-
-    except ValueError:
-        return ""
+    return []
 
 
-def parse(details):
+def _find_link(links, keywords):
 
-    text = details["content"]
+    for link in links:
+
+        title = link["title"].lower()
+
+        for key in keywords:
+
+            if key in title:
+                return link["url"]
+
+    return ""
+
+
+def parse(data):
+
+    sections = data["sections"]
+
+    links = data["links"]
 
     return {
-        "title": details["title"],
 
-        "description": details["description"],
+        "title": data["title"],
 
-        "dates": find(
-            text,
-            "Important Dates",
-            [
-                "Application Fee",
-                "Age Limit",
-                "Total Post"
-            ]
-        ),
+        "description": data["description"],
 
-        "fee": find(
-            text,
-            "Application Fee",
-            [
-                "Age Limit",
-                "Total Post"
-            ]
-        ),
+        "important_dates":
+            _find_section(
+                sections,
+                [
+                    "important dates",
+                    "dates"
+                ]
+            ),
 
-        "age": find(
-            text,
-            "Age Limit",
-            [
-                "Total Post",
-                "Vacancy Details",
-                "Eligibility Criteria"
-            ]
-        ),
+        "application_fee":
+            _find_section(
+                sections,
+                [
+                    "application fee",
+                    "fee"
+                ]
+            ),
 
-        "post": find(
-            text,
-            "Total Post",
-            [
-                "Vacancy Details",
-                "Eligibility Criteria"
-            ]
-        ),
+        "age_limit":
+            _find_section(
+                sections,
+                [
+                    "age limit"
+                ]
+            ),
 
-        "eligibility": find(
-            text,
-            "Eligibility Criteria",
-            [
-                "How To",
-                "Mode Of Selection",
-                "Important Links"
-            ]
-        ),
+        "vacancy":
+            _find_section(
+                sections,
+                [
+                    "vacancy",
+                    "post"
+                ]
+            ),
 
-        "selection": find(
-            text,
-            "Mode Of Selection",
-            [
-                "Important Links"
-            ]
-        )
+        "eligibility":
+            _find_section(
+                sections,
+                [
+                    "eligibility"
+                ]
+            ),
+
+        "selection":
+            _find_section(
+                sections,
+                [
+                    "selection"
+                ]
+            ),
+
+        "apply":
+            _find_link(
+                links,
+                [
+                    "apply online",
+                    "registration",
+                    "apply"
+                ]
+            ),
+
+        "notification":
+            _find_link(
+                links,
+                [
+                    "notification",
+                    "download notification",
+                    "official notification",
+                    "pdf"
+                ]
+            ),
+
+        "official":
+            _find_link(
+                links,
+                [
+                    "official website",
+                    "official site",
+                    "website"
+                ]
+            ),
+
+        "result":
+            _find_link(
+                links,
+                [
+                    "download result",
+                    "result"
+                ]
+            ),
+
+        "admit":
+            _find_link(
+                links,
+                [
+                    "admit card"
+                ]
+            ),
+
+        "answer_key":
+            _find_link(
+                links,
+                [
+                    "answer key"
+                ]
+            )
+
     }
