@@ -9,36 +9,15 @@ def get_latest():
     r = requests.get(URL, headers=HEADERS, timeout=30)
     soup = BeautifulSoup(r.text, "lxml")
 
-    links = []
+    jobs = []
 
-    bad = [
-        "Skip to content",
-        "Home",
-        "Menu",
-        "Login",
-        "Register",
-        "Privacy",
-        "Contact",
-        "About",
-    ]
+    for a in soup.select("a.wp-block-latest-posts__post-title"):
+        title = a.get_text(strip=True)
+        link = a["href"]
 
-    for a in soup.select("a[href]"):
-        title = a.get_text(" ", strip=True)
-
-        if len(title) < 20:
-            continue
-
-        if title in bad:
-            continue
-
-        href = a.get("href")
-
-        if href.startswith("/"):
-            href = URL.rstrip("/") + href
-
-        links.append({
+        jobs.append({
             "title": title,
-            "link": href
+            "link": link
         })
 
-    return links[:20]
+    return jobs
