@@ -7,21 +7,31 @@ from urllib.parse import urljoin
 
 HISTORY_FILE = "posted_jobs.json"
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "@jobupdatesbihar")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
+# Targeted Sites
 SITES_CONFIG = [
-    {"name": "BSUSC / Govt Portal", "url": "https://bsusc.bihar.gov.in/", "icon": "🎓"},
-    {"name": "Sarkari Result", "url": "https://sarkariresult.com.cm/", "icon": "💼"},
-    {"name": "Bihar Job Portal", "url": "https://www.biharjobportal.com/", "icon": "📌"},
-    {"name": "Free Job Portal", "url": "https://freejobportal.in/", "icon": "🎯"},
-    {"name": "Scholarship Bihar", "url": "https://scholarshipbihar.in/", "icon": "💰"},
-    {"name": "Magadh University", "url": "https://www.magadhuniversity.ac.in/", "icon": "🏛️"},
-    {"name": "Patna University", "url": "https://www.pup.ac.in/", "icon": "🏛️"},
-    {"name": "IGNOU", "url": "https://www.ignou.ac.in/", "icon": "📚"}
+    {"name": "BSUSC", "url": "https://bsusc.bihar.gov.in/", "tag": "BSUSC"},
+    {"name": "Sarkari Result", "url": "https://sarkariresult.com.cm/", "tag": "SarkariResult"},
+    {"name": "Bihar Job Portal", "url": "https://www.biharjobportal.com/", "tag": "BiharJobPortal"},
+    {"name": "Free Job Portal", "url": "https://freejobportal.in/", "tag": "FreeJobPortal"},
+    {"name": "Scholarship Bihar", "url": "https://scholarshipbihar.in/", "tag": "ScholarshipBihar"},
+    {"name": "Magadh University", "url": "https://www.magadhuniversity.ac.in/", "tag": "MagadhUniv"},
+    {"name": "Patna University", "url": "https://www.pup.ac.in/", "tag": "PatnaUniv"},
+    {"name": "IGNOU", "url": "https://www.ignou.ac.in/", "tag": "IGNOU"}
+]
+
+# Words to STRICTLY ignore
+JUNK_KEYWORDS = [
+    "forgot", "password", "voter", "selfi", "login", "register", "contact", 
+    "privacy", "disclaimer", "home", "feedback", "faq", "sitemap", "search", 
+    "terms", "help", "admin", "user", "sign in", "sign up", "download app",
+    "whatsapp", "facebook", "twitter", "instagram", "youtube", "skip to content",
+    "read more", "view more", "click here"
 ]
 
 def load_posted_history():
@@ -37,37 +47,16 @@ def save_posted_history(posted_links):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(list(posted_links), f, indent=2)
 
-def send_rich_telegram_post(title, site_name, icon, apply_link, posts_count="", dates="", fee="", age="", qual=""):
-    """Creates and sends a rich formatted HTML post to Telegram."""
+def send_compact_telegram_post(title, site_name, site_tag, link):
+    """Sends a clean, compact and short Telegram post."""
     
-    # Build optional sections dynamically
-    details_block = ""
-    if dates:
-        details_block += f"📅 <b>IMPORTANT DATES:</b>\n{dates}\n\n"
-    if fee:
-        details_block += f"💰 <b>APPLICATION FEE:</b> {fee}\n\n"
-    if age:
-        details_block += f"🎂 <b>AGE LIMIT:</b> {age}\n\n"
-    if qual:
-        details_block += f"🎓 <b>QUALIFICATION:</b>\n{qual}\n\n"
+    # Clean Compact Post Format
+    message = f"""<b>📢 {title}</b>
 
-    message = f"""🔥 <b>{title.upper()}</b> 🔥
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏢 <b>Source:</b> {site_name}
+🔗 <b>Link:</b> <a href="{link}">Click Here for Details</a>
 
-{f'🔢 <b>Total Vacancies:</b> {posts_count}' if posts_count else ''}
-🏢 <b>Source / Authority:</b> {site_name}
-
-{details_block}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ <b>IMPORTANT LINKS:</b>
-
-🔗 <b>Apply Online / Notice Details:</b>
-<a href="{apply_link}">👉 Click Here to Apply / Read Details</a>
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📢 <b>Daily Job Updates Ke Liye Join Karein:</b>
-📲 <b>Join Channel:</b> {CHAT_ID}
-
-#BiharJobs #SarkariNaukri #LatestJob #{site_name.replace(' ', '')}"""
+#BiharJobs #{site_tag}"""
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -78,15 +67,15 @@ def send_rich_telegram_post(title, site_name, icon, apply_link, posts_count="", 
     }
 
     try:
-        res = requests.post(url, json=payload, timeout=12)
+        res = requests.post(url, json=payload, timeout=10)
         if res.status_code == 200:
-            print(f"Successfully posted: {title[:40]}")
+            print(f"Posted: {title}")
             return True
         else:
             print(f"Telegram API Error: {res.text}")
             return False
     except Exception as e:
-        print(f"Failed to send message: {e}")
+        print(f"Error sending message: {e}")
         return False
 
 def scrape_and_process():
@@ -94,7 +83,7 @@ def scrape_and_process():
     new_count = 0
 
     for site in SITES_CONFIG:
-        print(f"Scanning {site['name']}...")
+        print(f"Scanning: {site['name']}...")
         try:
             resp = requests.get(site["url"], headers=HEADERS, timeout=12)
             if resp.status_code != 200:
@@ -106,31 +95,39 @@ def scrape_and_process():
                 title = a_tag.get_text(strip=True)
                 href = a_tag["href"].strip()
 
-                if len(title) < 15 or len(title) > 150:
+                # Filter short or too long text
+                if len(title) < 20 or len(title) > 160:
+                    continue
+
+                # Filter junk links
+                title_lower = title.lower()
+                if any(junk in title_lower for junk in JUNK_KEYWORDS):
                     continue
 
                 full_url = urljoin(site["url"], href)
 
                 if full_url not in posted_links:
-                    success = send_rich_telegram_post(
+                    success = send_compact_telegram_post(
                         title=title,
                         site_name=site["name"],
-                        icon=site["icon"],
-                        apply_link=full_url
+                        site_tag=site["tag"],
+                        link=full_url
                     )
                     if success:
                         posted_links.add(full_url)
                         new_count += 1
-                        time.sleep(2)
+                        time.sleep(1.5)
         except Exception as e:
             print(f"Error scraping {site['name']}: {e}")
 
     if new_count > 0:
         save_posted_history(posted_links)
-        print(f"Done! Posted {new_count} new updates.")
+        print(f"Done! Sent {new_count} clean posts.")
+    else:
+        print("No new updates found.")
 
 if __name__ == "__main__":
-    if not BOT_TOKEN:
-        print("TELEGRAM_BOT_TOKEN environment variable missing!")
+    if not BOT_TOKEN or not CHAT_ID:
+        print("Error: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing.")
     else:
         scrape_and_process()
