@@ -2,7 +2,7 @@ name: Bihar Job & Notice Scraper
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Har 30 min me chalega
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -24,14 +24,16 @@ jobs:
 
       - name: Run Scraper
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python scraper.py
 
       - name: Save History
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add posted_jobs.json
-          git commit -m "Auto update posted links history" || exit 0
-          git push
+          if [ -f posted_jobs.json ]; then
+            git add posted_jobs.json
+            git commit -m "Auto update posted links history" || exit 0
+            git push
+          fi
