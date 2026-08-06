@@ -26,7 +26,7 @@ SITES_CONFIG = [
 JUNK_KEYWORDS = [
     "forgot", "password", "voter", "selfi", "login", "register", "contact", 
     "privacy", "disclaimer", "home", "feedback", "faq", "sitemap", "terms", 
-    "help", "admin", "sign in", "sign up", "whatsapp", "telegram", "twitter"
+    "help", "admin", "sign in", "sign up", "whatsapp", "telegram", "twitter", "question:"
 ]
 
 def load_posted_history():
@@ -42,41 +42,40 @@ def save_posted_history(posted_links):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(list(posted_links), f, indent=2)
 
-def detect_category(title, url):
-    """Categorizes the post type based on keywords."""
+def detect_post_type(title, url):
+    """Detects type of post: JOB, RESULT, ADMIT_CARD, ANSWER_KEY, SCHOLARSHIP, ADMISSION"""
     text = (title + " " + url).lower()
-    if "result" in text or "merit list" in text or "cut off" in text or "score" in text:
-        return "📊 RESULT & MERIT LIST", "#Result #MeritList"
-    elif "admit card" in text or "hall ticket" in text or "exam date" in text or "city" in text:
-        return "🎟️ ADMIT CARD / EXAM DATE", "#AdmitCard #ExamNotice"
-    elif "answer key" in text or "omr" in text:
-        return "🔑 ANSWER KEY", "#AnswerKey"
-    elif "scholarship" in text or "pms" in text or "medhasoft" in text:
-        return "💰 SCHOLARSHIP UPDATE", "#Scholarship #BiharScholarship"
-    elif "admission" in text or "counselling" in text or "spot" in text:
-        return "🎓 ADMISSION & COUNSELLING", "#Admission #Counselling"
+    if any(k in text for k in ["result", "merit list", "cut off", "score card"]):
+        return "RESULT", "📊 RESULT / MERIT LIST", "#Result #MeritList"
+    elif any(k in text for k in ["admit card", "hall ticket", "exam date", "city"]):
+        return "ADMIT_CARD", "🎟️ ADMIT CARD / EXAM NOTICE", "#AdmitCard #ExamDate"
+    elif any(k in text for k in ["answer key", "omr"]):
+        return "ANSWER_KEY", "🔑 ANSWER KEY", "#AnswerKey"
+    elif any(k in text for k in ["scholarship", "pms", "medhasoft"]):
+        return "SCHOLARSHIP", "💰 SCHOLARSHIP UPDATE", "#Scholarship #BiharScholarship"
+    elif any(k in text for k in ["admission", "counselling", "spot"]):
+        return "ADMISSION", "🎓 ADMISSION NOTICE", "#Admission #Counselling"
     else:
-        return "💼 LATEST JOB RECRUITMENT", "#BiharJob #SarkariNaukri"
+        return "JOB", "💼 LATEST JOB RECRUITMENT", "#BiharJob #SarkariNaukri"
 
-def deep_scrape_inner_page(post_url):
-    """Visits the inner page to extract dates, fee, age limit, and direct links."""
+def scrape_inner_details(post_url, post_type):
+    """Scrapes inner page only if it is a JOB or SCHOLARSHIP."""
     details = {
         "dates": [],
         "fee": [],
         "age": [],
         "apply_link": "",
-        "pdf_link": "",
-        "official_site": ""
+        "pdf_link": ""
     }
     
     try:
-        resp = requests.get(post_url, headers=HEADERS, timeout=12)
+        resp = requests.get(post_url, headers=HEADERS, timeout=10)
         if resp.status_code != 200:
             return details
 
         soup = BeautifulSoup(resp.content, "lxml")
 
-        # Extract direct action links
+        # Action links
         for a in soup.find_all("a", href=True):
             a_text = a.get_text(strip=True).lower()
             href = urljoin(post_url, a["href"].strip())
@@ -87,82 +86,91 @@ def deep_scrape_inner_page(post_url):
             if any(k in a_text for k in ["apply online", "apply link", "registration", "click here to apply", "online form"]):
                 if not details["apply_link"] and href != post_url:
                     details["apply_link"] = href
-            elif any(k in a_text for k in ["notification", "notice", "pdf", "download notification", "official notice"]):
+            elif any(k in a_text for k in ["notification", "notice", "pdf", "download notification"]):
                 if not details["pdf_link"] and href != post_url:
                     details["pdf_link"] = href
-            elif any(k in a_text for k in ["official website", "official portal", "home page"]):
-                if not details["official_site"]:
-                    details["official_site"] = href
 
-        # Extract structured details from table rows
-        for tr in soup.find_all("tr"):
-            row_text = tr.get_text(" | ", strip=True)
-            row_lower = row_text.lower()
-            
-            if any(k in row_lower for k in ["start date", "last date", "apply date", "exam date"]):
-                if len(row_text) < 150 and row_text not in details["dates"]:
-                    details["dates"].append(row_text)
-            elif any(k in row_lower for k in ["fee", "rs.", "₹", "general", "sc/st"]):
-                if len(row_text) < 150 and row_text not in details["fee"]:
-                    details["fee"].append(row_text)
-            elif any(k in row_lower for k in ["age limit", "minimum age", "maximum age"]):
-                if len(row_text) < 150 and row_text not in details["age"]:
-                    details["age"].append(row_text)
+        # Extract structured details for Jobs only
+        if post_type in ["JOB", "SCHOLARSHIP"]:
+            for tr in soup.find_all("tr"):
+                row_text = tr.get_text(" | ", strip=True)
+                row_lower = row_text.lower()
+                
+                if "question:" in row_lower or "answer:" in row_lower:
+                    continue
+                
+                if any(k in row_lower for k in ["start date", "last date", "apply date"]):
+                    if len(row_text) < 120 and row_text not in details["dates"]:
+                        details["dates"].append(row_text)
+                elif any(k in row_lower for k in ["fee", "rs.", "₹"]):
+                    if len(row_text) < 120 and row_text not in details["fee"]:
+                        details["fee"].append(row_text)
+                elif any(k in row_lower for k in ["age limit", "minimum age", "maximum age"]):
+                    if len(row_text) < 120 and row_text not in details["age"]:
+                        details["age"].append(row_text)
 
         if not details["apply_link"]:
             details["apply_link"] = post_url
 
     except Exception as e:
-        print(f"Error deep scraping {post_url}: {e}")
+        print(f"Error scraping inner page {post_url}: {e}")
 
     return details
 
-def send_detailed_telegram_post(title, site_name, post_url):
-    """Formats and sends a complete detailed card to Telegram."""
-    category, hashtags = detect_category(title, post_url)
-    
-    # Deep scrape inner page
-    inner = deep_scrape_inner_page(post_url)
-    
-    # Format optional sections
-    dates_str = "\n".join([f"▪️ {d}" for d in inner["dates"][:3]]) if inner["dates"] else "▪️ Official Notice me check karein"
-    fee_str = "\n".join([f"▪️ {f}" for f in inner["fee"][:2]]) if inner["fee"] else "▪️ Details for fee in official notice"
-    age_str = "\n".join([f"▪️ {a}" for a in inner["age"][:2]]) if inner["age"] else "▪️ As per Notification Rules"
+def send_smart_telegram_post(title, site_name, post_url):
+    post_type, category, hashtags = detect_post_type(title, post_url)
+    inner = scrape_inner_details(post_url, post_type)
 
-    # Direct Action Links Block
-    links_block = ""
-    if inner["pdf_link"]:
-        links_block += f"📄 <b>Notification PDF Link:</b>\n<a href=\"{inner['pdf_link']}\">👉 Download Official Notification PDF</a>\n\n"
-    
-    links_block += f"🔗 <b>Direct Apply / Details Link:</b>\n<a href=\"{inner['apply_link']}\">👉 Click Here for Direct Link</a>\n\n"
-    
-    if inner["official_site"]:
-        links_block += f"🌐 <b>Official Website:</b>\n<a href=\"{inner['official_site']}\">👉 Visit Official Portal</a>\n\n"
+    # Clean channel handle formatting
+    channel_branding = CHAT_ID if CHAT_ID.startswith("@") else "Telegram Channel"
 
-    # Full Message Payload
-    message = f"""🔥 <b>{title.upper()}</b> 🔥
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # BUILD MESSAGE DYNAMICALLY BASED ON TYPE
+    if post_type in ["RESULT", "ADMIT_CARD", "ANSWER_KEY"]:
+        # Clean & Minimal Layout for Results / Admit Cards / Answer Keys
+        message = f"""<b>{category}</b>
+📢 <b>{title.upper()}</b>
 
-📂 <b>Category:</b> {category}
 🏢 <b>Source:</b> {site_name}
 
-📅 <b>IMPORTANT DATES / SCHEDULE:</b>
-{dates_str}
-
-💰 <b>APPLICATION FEE DETAILS:</b>
-{fee_str}
-
-🎂 <b>AGE LIMIT & ELIGIBILITY:</b>
-{age_str}
+🔗 <b>Direct Link:</b>
+<a href="{inner['apply_link']}">👉 Click Here to Check / Download</a>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ <b>DIRECT ACTION LINKS:</b>
+📲 <b>Join For Latest Updates:</b> {channel_branding}
 
-{links_block}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📢 <b>Daily Bihar Job Updates Ke Liye Join Karein:</b>
-📲 <b>Join Channel:</b> {CHAT_ID}
+{hashtags}"""
 
-{hashtags} #BiharUpdates"""
+    else:
+        # Detailed Layout for Jobs & Scholarships (ONLY IF REAL DATA EXISTS)
+        dynamic_blocks = ""
+        
+        if inner["dates"]:
+            dates_text = "\n".join([f"▪️ {d}" for d in inner["dates"][:3]])
+            dynamic_blocks += f"\n📅 <b>IMPORTANT DATES:</b>\n{dates_text}\n"
+            
+        if inner["fee"]:
+            fee_text = "\n".join([f"▪️ {f}" for f in inner["fee"][:2]])
+            dynamic_blocks += f"\n💰 <b>APPLICATION FEE:</b>\n{fee_text}\n"
+            
+        if inner["age"]:
+            age_text = "\n".join([f"▪️ {a}" for a in inner["age"][:2]])
+            dynamic_blocks += f"\n🎂 <b>AGE LIMIT:</b>\n{age_text}\n"
+
+        pdf_block = f"📄 <a href=\"{inner['pdf_link']}\">Download Notification PDF</a>\n" if inner["pdf_link"] else ""
+
+        message = f"""<b>{category}</b>
+🔥 <b>{title.upper()}</b> 🔥
+
+🏢 <b>Source:</b> {site_name}
+{dynamic_blocks}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ <b>DIRECT LINKS:</b>
+{pdf_block}🔗 <a href="{inner['apply_link']}">Click Here to Apply / Read Notice</a>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📲 <b>Join For Daily Updates:</b> {channel_branding}
+
+{hashtags}"""
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -175,21 +183,21 @@ def send_detailed_telegram_post(title, site_name, post_url):
     try:
         res = requests.post(url, json=payload, timeout=12)
         if res.status_code == 200:
-            print(f"Posted Detailed Card: {title[:40]}")
+            print(f"Posted: {title[:40]}")
             return True
         else:
             print(f"Telegram API Error: {res.text}")
             return False
     except Exception as e:
-        print(f"Failed to send: {e}")
+        print(f"Error: {e}")
         return False
 
-def run_deep_scraper():
+def run_scraper():
     posted_links = load_posted_history()
     new_count = 0
 
     for site in SITES_CONFIG:
-        print(f"Scanning Homepage: {site['name']}...")
+        print(f"Scanning: {site['name']}...")
         try:
             resp = requests.get(site["url"], headers=HEADERS, timeout=12)
             if resp.status_code != 200:
@@ -210,22 +218,22 @@ def run_deep_scraper():
                 full_url = urljoin(site["url"], href)
 
                 if full_url not in posted_links:
-                    success = send_detailed_telegram_post(title, site["name"], full_url)
+                    success = send_smart_telegram_post(title, site["name"], full_url)
                     if success:
                         posted_links.add(full_url)
                         new_count += 1
-                        time.sleep(2) # Gap between posts
+                        time.sleep(2)
         except Exception as e:
             print(f"Error scanning {site['name']}: {e}")
 
     if new_count > 0:
         save_posted_history(posted_links)
-        print(f"Success! Posted {new_count} detailed cards.")
+        print(f"Completed! Sent {new_count} clean posts.")
     else:
-        print("No new updates found.")
+        print("No new updates.")
 
 if __name__ == "__main__":
     if not BOT_TOKEN or not CHAT_ID:
         print("Error: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing.")
     else:
-        run_deep_scraper()
+        run_scraper()
